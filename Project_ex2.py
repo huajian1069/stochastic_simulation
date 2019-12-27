@@ -4,6 +4,13 @@ import matplotlib.pyplot as plt
 
 
 def metropolis_hastings(x, p, u):
+    """
+    generate proposal from p, accept or reject it based on calculating the
+    :param x: current state
+    :param p: the transition density
+    :param u: target density
+    :return: next state, at the end, this function return a equivalent desired invariant distribution
+    """
     global acc
     y = p(loc=x)
     ratio = u(y) / u(x)
@@ -16,7 +23,18 @@ def metropolis_hastings(x, p, u):
     return x_next
 
 
-def simple_parallel_tempering(x, N, p, u, u0, Ns):
+def simple_parallel_tempering(x, K, N, p, u, u0, Ns):
+    """
+    parallel tempering algorithm
+    :param x: empty array of result random number
+    :param K: number of parallel temperature
+    :param N: length of returned random number array
+    :param p: the transition density
+    :param u: target density in different temperature
+    :param u0: initial distribution
+    :param Ns: every Ns steps, conduct one step of swapping
+    :return: desired random number sampled from desired distribution
+    """
     for i in range(K):
         x[i][0] = u0()
     for n in range(N - 1):
@@ -34,6 +52,14 @@ def simple_parallel_tempering(x, N, p, u, u0, Ns):
 
 
 def random_walk_metropolis(N, p, u, u0):
+    """
+    random walk Metropolis algorithm
+    :param N: length of returned random number array
+    :param p: the transition density
+    :param u: target density in different temperature
+    :param u0: initial distribution
+    :return: desired random number sampled from desired distribution
+    """
     x = np.zeros((N,))
     x[0] = u0()
     for n in range(N - 1):
@@ -41,22 +67,22 @@ def random_walk_metropolis(N, p, u, u0):
     return x
 
 
-# ex2
 acc = 0
 K = 4
 N = 10000
 p = [lambda loc: st.norm.rvs(loc=loc, scale=3)] * K
 gammas = [1, 2, 4, 8, 16]
-T = 2
+a = 2
 u0 = st.uniform(loc=-3, scale=6).rvs
 Ns = 1
+
 x = np.zeros((K, N))
 x_t = np.linspace(-5, 5, 1000)
 fig = plt.figure(figsize=(20, 4))
 for j, gamma in enumerate(gammas):
-    u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (T ** i)) for i in range(4)]
+    u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
     acc = 0
-    xs = simple_parallel_tempering(x, N, p, u, u0, Ns)
+    xs = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
     xs_walk = random_walk_metropolis(N, p[0], u[0], u0)
     stat = {'acceptance rate': acc / ((N - 1) * K)}
     print('acceptance rate when gamma=%d: %f' % (gamma, stat['acceptance rate']))
@@ -64,7 +90,7 @@ for j, gamma in enumerate(gammas):
 
     ax = fig.add_subplot(2, 5, j + 1)
     ax.hist(xs_walk, bins=100, density=True, label='Walk')
-    ax.hist(xs, bins=100, density=True, label='PT')
+    ax.hist(xs, bins=100, density=True, label='simple_PT')
     ax.plot(x_t, 0.22 * y_t / stat['acceptance rate'], linewidth=1., label=r'$\tilde{f}(x)$')
     ax.set_title('gamma = ' + str(gamma))
 
@@ -77,29 +103,4 @@ plt.legend()
 # plt.savefig('figures/project_hist.png')
 plt.show()
 
-# ex3
-sigma = 0.05
-phi1 = lambda x, y: ((x - 1.7) ** 2 + (y - 1) ** 2 - 1) ** 2 * (x <= 2.5) / (-2 * sigma ** 2)
-phi2 = lambda x, y: y ** 2 * (x >= 9) * (x < 11) / (-2 * sigma ** 2)
-phi3 = lambda x, y: (y - 2) ** 2 * (x >= 9) * (x < 11) * (y >= 0) * (y < 2) / (-2 * sigma ** 2)
-phi4 = lambda x, y: ((x - 7) ** 2 + (y - 1) ** 2 - 1) ** 2 / (-2 * sigma ** 2)
-phi5 = lambda x, y: (y + x - 8) ** 2 * (x > 7.7) * (x < 8.4) / (-2 * sigma ** 2)
-phi6 = lambda x, y: (y - (-0.57 * x + 3.25)) ** 2 * (x > 3.142) * (x < 4.86) / (-2 * sigma ** 2)
-phi7 = lambda x, y: ((x - 4) ** 2 + (y - 1) ** 2 - 1) ** 2 * ((y < 0.5) + (y > 1.5)) / (-2 * sigma ** 2)
 
-u = [lambda x, y, i=i: np.exp(-np.log(
-    np.exp(-phi1(x, y)) + np.exp(-phi2(x, y)) + np.exp(-phi3(x, y)) + np.exp(-phi4(x, y)) +
-    np.exp(-phi5(x, y)) + np.exp(-phi6(x, y)) + np.exp(-phi7(x, y))
-) * (x >= -2) * (x <= 13) * (y >= -1) * (y <= 3) / (T ** i)) for i in range(4)]
-us = [lambda xy, i=i: u[i](xy[0], xy[1]) for i in range(4)]
-p = [lambda loc: st.multivariate_normal.rvs(mean=loc, cov=np.array([[4, 0], [0, 1]]))] * K
-u0 = st.uniform(loc=np.array([-2, -1]), scale=np.array([15, 4])).rvs
-x = np.zeros((K, N, 2))
-acc = 0
-N = 100
-xs = simple_parallel_tempering(x, N, p, us, u0, Ns)
-stat = {'acceptance rate': acc / ((N - 1) * K)}
-print('acceptance rate: %f' % (stat['acceptance rate']))
-fig = plt.figure(figsize=(4, 4))
-plt.hist2d(xs[0], xs[1], bins=30)
-plt.show()
