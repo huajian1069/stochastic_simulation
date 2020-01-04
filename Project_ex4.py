@@ -63,7 +63,7 @@ def simple_parallel_tempering(x, K, N, p, u, u0, Ns):
             x[k][n + 1] = metropolis_hastings(x[k][n], p[k], u[k])
         if n % Ns == 0:
             i = int(st.uniform.rvs() * (K - 1))
-            ratio = u[i + 1](x[i][n + 1]) * u[i](x[i + 1][n + 1]) / (u[i](x[i][n + 1]) * u[i + 1](x[i + 1][n]))
+            ratio = u[i + 1](x[i][n + 1]) * u[i](x[i + 1][n + 1]) / (u[i](x[i][n + 1]) * u[i + 1](x[i + 1][n + 1]))
             alpha = min(1, ratio)
             if st.uniform.rvs() < alpha:
                 x_swap = x[i][n + 1]
@@ -91,7 +91,7 @@ def full_parallel_tempering(x, K, N, p, u, u0, Ns):
             x[k][n + 1] = metropolis_hastings(x[k][n], p[k], u[k])
         if n % Ns == 0:
             for i in range(K-1):
-                ratio = u[i + 1](x[i][n + 1]) * u[i](x[i + 1][n + 1]) / (u[i](x[i][n + 1]) * u[i + 1](x[i + 1][n]))
+                ratio = u[i + 1](x[i][n + 1]) * u[i](x[i + 1][n + 1]) / (u[i](x[i][n + 1]) * u[i + 1](x[i + 1][n + 1]))
                 alpha = min(1, ratio)
                 if st.uniform.rvs() < alpha:
                     x_swap = x[i][n + 1]
@@ -127,7 +127,7 @@ def adaptive_parallel_tempering(x, K, N, p, u, u0, Ns, alpha_opt):
         if n % Ns == 0:
             i = st.randint(0, K-1).rvs()
             ratio = u[i + 1](x[i][n + 1], T[i+1]) * u[i](x[i + 1][n + 1], T[i]) \
-                    / (u[i](x[i][n + 1], T[i]) * u[i + 1](x[i + 1][n], T[i+1]))
+                    / (u[i](x[i][n + 1], T[i]) * u[i + 1](x[i + 1][n + 1], T[i+1]))
             alpha = min(1, ratio)
             if st.uniform.rvs() < alpha:
                 x_swap = x[i][n + 1]
@@ -170,7 +170,7 @@ for j, gamma in enumerate(gammas):
     
     acc = 0
     u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
-    xs = full_parallel_tempering(x, K, N, p, u, u0, Ns)
+    xs = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
     stat = {'acceptance rate': acc / ((N - 1) * K)}
     print('acceptance rate when gamma=%d: %f' % (gamma, stat['acceptance rate']))
     ax2 = fig.add_subplot(2, 5, 5 + j + 1)
@@ -178,6 +178,7 @@ for j, gamma in enumerate(gammas):
     ax2.plot(x_t, y_t / integral, linewidth=1.5, label=r'$\tilde{f}(x)$')
     ax2.set_title('gamma = ' + str(gamma))
     plt.legend()
+plt.savefig('figures/project_ex4_adaptive_hist.png')
 plt.show()
 
 
@@ -198,7 +199,7 @@ for j, gamma in enumerate(gammas):
     plt.legend()
     
     acc = 0
-    xs = full_parallel_tempering(x, K, N, p, u, u0, Ns)
+    xs = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
     stat = {'acceptance rate': acc / ((N - 1) * K)}
     print('acceptance rate when gamma=%d: %f' % (gamma, stat['acceptance rate']))
     ax2 = fig.add_subplot(2, 5, 5 + j + 1)
@@ -206,7 +207,7 @@ for j, gamma in enumerate(gammas):
     ax2.plot(x_t, y_t / integral, linewidth=1., label=r'$\tilde{f}(x)$')
     ax2.set_title('gamma = ' + str(gamma))
     plt.legend()
-# plt.savefig('figures/project_hist_ex4_full.png')
+plt.savefig('figures/project_ex4_full_hist.png')
 plt.show()
 
 # plot the auto-correlation plots
@@ -231,7 +232,7 @@ for j, gamma in enumerate(gammas):
     ax2.set_title('gamma = ' + str(gamma))
     plt.legend()
     
-# plt.savefig('figures/project_hist.png')
+plt.savefig('figures/project_ex4_adaptive_acf.png')
 plt.show()
 
 x = np.zeros((K, N))
@@ -254,12 +255,11 @@ for j, gamma in enumerate(gammas):
     ax2.bar(range(len(r_xs)), r_xs, label='simple_PT')
     ax2.set_title('gamma = ' + str(gamma))
     plt.legend()
-    
-# plt.savefig('figures/project_hist.png')
+plt.savefig('figures/project_ex4_full_acf.png')
 plt.show()
 
-# plot the trace plots
-# plot the trace-plots
+
+# plot the trace-plots for full PT
 x = np.zeros((K, N))
 fig = plt.figure(figsize=(20, 30))
 for j, gamma in enumerate(gammas):
@@ -277,10 +277,10 @@ for j, gamma in enumerate(gammas):
     ax2.plot(xs_s, label='simple_PT')
     ax2.set_title('gamma = ' + str(gamma))
     plt.legend()
-# plt.savefig('figures/project_hist.png')
+plt.savefig('figures/project_ex4_full_trace_plot.png')
 plt.show()
 
-# plot the trace-plots
+# plot the trace-plots for adaptive PT
 x = np.zeros((K, N))
 fig = plt.figure(figsize=(20, 30))
 for j, gamma in enumerate(gammas):
@@ -298,5 +298,5 @@ for j, gamma in enumerate(gammas):
     ax2.plot(xs_s, label='simple_PT')
     ax2.set_title('gamma = ' + str(gamma))
     plt.legend()
-# plt.savefig('figures/project_hist.png')
+plt.savefig('figures/project_ex4_adaptive_trace_plot.png')
 plt.show()
