@@ -2,82 +2,10 @@ import numpy as np
 import scipy.stats as st
 import matplotlib.pyplot as plt
 import scipy.integrate as integrate
+from Project_utils import acf, random_walk_metropolis, simple_parallel_tempering
+import warnings
+warnings.simplefilter("ignore")
 
-def metropolis_hastings(x, p, u):
-    """
-    generate proposal from p, accept or reject it based on calculating the
-    :param x: current state
-    :param p: the transition density
-    :param u: target density
-    :return: next state, at the end, this function return a equivalent desired invariant distribution
-    """
-    global acc
-    y = p(loc=x)
-    ratio = u(y) / u(x)
-    alpha = min(1, ratio)
-    if st.uniform.rvs() < alpha:
-        x_next = y
-        acc += 1
-    else:
-        x_next = x
-    return x_next
-
-
-def simple_parallel_tempering(x, K, N, p, u, u0, Ns):
-    """
-    parallel tempering algorithm
-    :param x: empty array of result random number
-    :param K: number of parallel temperature
-    :param N: length of returned random number array
-    :param p: the transition density
-    :param u: target density in different temperature
-    :param u0: initial distribution
-    :param Ns: every Ns steps, conduct one step of swapping
-    :return: desired random number sampled from desired distribution
-    """
-    for i in range(K):
-        x[i][0] = u0()
-    for n in range(N - 1):
-        for k in range(K):
-            x[k][n + 1] = metropolis_hastings(x[k][n], p[k], u[k])
-        if n % Ns == 0:
-            i = int(st.uniform.rvs() * (K - 1))
-            ratio = u[i + 1](x[i][n + 1]) * u[i](x[i + 1][n + 1]) / (u[i](x[i][n + 1]) * u[i + 1](x[i + 1][n + 1]))
-            alpha = min(1, ratio)
-            if st.uniform.rvs() < alpha:
-                x_swap = x[i][n + 1]
-                x[i][n + 1] = x[i + 1][n]
-                x[i + 1][n] = x_swap
-    return x[0]
-
-
-def random_walk_metropolis(N, p, u, u0):
-    """
-    random walk Metropolis algorithm
-    :param N: length of returned random number array
-    :param p: the transition density
-    :param u: target density in different temperature
-    :param u0: initial distribution
-    :return: desired random number sampled from desired distribution
-    """
-    x = np.zeros((N,))
-    x[0] = u0()
-    for n in range(N - 1):
-        x[n + 1] = metropolis_hastings(x[n], p, u)
-    return x
-
-def acf(x, k = 41):
-    """
-    compute the auto-correlations
-    :param x: the generated Markov chain
-    :param k: lag size
-    """
-    N = len(x)
-    r = np.zeros((k, ))
-    m = x.mean()
-    for i in range(k):
-        r[i] = np.correlate(x[:N-i] - m, x[i:] - m) / np.sqrt(sum((x[:N-i] - m)**2) * sum((x[i:] - m)**2))
-    return r
 
 acc = 0
 K = 4
@@ -88,6 +16,7 @@ a = 2
 u0 = st.uniform(loc=-3, scale=6).rvs
 Ns = 1
 x = np.zeros((K, N))
+x_walk = np.zeros((N,))
 x_t = np.linspace(-5, 5, 1000)
 # plot the histograms of samples
 fig = plt.figure(figsize=(20, 7))
@@ -95,12 +24,12 @@ for j, gamma in enumerate(gammas):
     u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
     acc = 0
     xs = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
-    xs_walk = random_walk_metropolis(N, p[0], u[0], u0)
+    xs_walk = random_walk_metropolis(x_walk, N, p[0], u[0], u0)
     stat = {'acceptance rate': acc / ((N - 1) * K)}
     print('acceptance rate when gamma=%d: %f' % (gamma, stat['acceptance rate']))
     y_t = u[0](x_t)
     integral = integrate.quad(u[0], -5, 5)[0]
-    
+
     ax = fig.add_subplot(2, 5, j + 1)
    # ax.hist(xs_walk, bins=100, density=True, label='Walk')
     ax.hist(xs, bins=100, density=True, label='simple_PT')
@@ -123,10 +52,10 @@ for j, gamma in enumerate(gammas):
     u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
     acc = 0
     xs = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
-    xs_walk = random_walk_metropolis(N, p[0], u[0], u0)
+    xs_walk = random_walk_metropolis(x_walk, N, p[0], u[0], u0)
     r_xs = acf(xs)
     r_walk = acf(xs_walk)
-    
+
     ax = fig.add_subplot(5, 2, 2*j + 1)
     ax.bar(range(len(r_xs)), r_xs, label='simple_PT')
     ax.set_title('gamma = ' + str(gamma))
@@ -146,8 +75,8 @@ for j, gamma in enumerate(gammas):
     u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
     acc = 0
     xs = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
-    xs_walk = random_walk_metropolis(N, p[0], u[0], u0)
-    
+    xs_walk = random_walk_metropolis(x_walk, N, p[0], u[0], u0)
+
     ax = fig.add_subplot(10, 1, 2*j + 1)
     ax.plot(xs, label='simple_PT')
     ax.set_title('gamma = ' + str(gamma))
@@ -160,7 +89,7 @@ for j, gamma in enumerate(gammas):
 plt.savefig('figures/project_ex2_trace_plot.png')
 plt.show()
 
-# compute the efficient sample size
+# compute the effective sample size
 x = np.zeros((K, N))
 for j, gamma in enumerate(gammas):
     u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
@@ -169,10 +98,10 @@ for j, gamma in enumerate(gammas):
     for l in range(5):
         acc = 0
         xs = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
-        xs_walk = random_walk_metropolis(N, p[0], u[0], u0)
+        xs_walk = random_walk_metropolis(x_walk, N, p[0], u[0], u0)
         ess_xs += np.abs(N/(1+2*(acf(xs, 1000).sum()-1)))
         ess_walk += np.abs(N/(1+2*(acf(xs_walk, 1000).sum()-1)))
-    print('effective sample size for Markov chain generated by simple PT: %f' % (ess_xs/5)) 
+    print('effective sample size for Markov chain generated by simple PT: %f' % (ess_xs/5))
     print('effective sample size for Markov chain generated by random walk MH: %f' % (ess_walk/5))
 
 '''
