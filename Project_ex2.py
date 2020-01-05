@@ -5,7 +5,7 @@ import scipy.integrate as integrate
 from Project_utils import *
 import warnings
 warnings.simplefilter("ignore")
-
+np.random.seed(12)
 
 K = 4
 N = 10000
@@ -18,7 +18,7 @@ x = np.zeros((K, N))
 x_walk = np.zeros((N,))
 x_t = np.linspace(-5, 5, 1000)
 # plot the histograms of samples
-fig = plt.figure(figsize=(20, 7))
+fig = plt.figure(figsize=(25, 10))
 for j, gamma in enumerate(gammas):
     u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
     xs, acc = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
@@ -66,7 +66,7 @@ plt.show()
 
 # plot the trace-plots
 x = np.zeros((K, N))
-fig = plt.figure(figsize=(20, 30))
+fig = plt.figure(figsize=(15, 25))
 for j, gamma in enumerate(gammas):
     u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
     acc = 0
