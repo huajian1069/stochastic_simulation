@@ -16,13 +16,11 @@ def metropolis_hastings_adaptive(x, p, u, T):
     :param T: temperature of this parallel distribution
     :return: next state, at the end, this function return a equivalent desired invariant distribution
     """
-    global acc
     y = p(loc=x)
     ratio = u(y, T) / u(x, T)
     alpha = min(1, ratio)
     if st.uniform.rvs() < alpha:
         x_next = y
-        acc += 1
     else:
         x_next = x
     return x_next
@@ -40,6 +38,7 @@ def full_parallel_tempering(x, K, N, p, u, u0, Ns):
     :param Ns: every Ns steps, conduct one step of swapping
     :return: desired random number sampled from desired distribution
     """
+    acceptance = 0
     for i in range(K):
         x[i][0] = u0()
     for n in range(N - 1):
@@ -53,7 +52,8 @@ def full_parallel_tempering(x, K, N, p, u, u0, Ns):
                     x_swap = x[i][n + 1]
                     x[i][n + 1] = x[i + 1][n]
                     x[i + 1][n] = x_swap
-    return x[0]
+                    acceptance += 1
+    return x[0], acceptance / ((K-1) * N / Ns)
 
 
 def adaptive_parallel_tempering(x, K, N, p, u, u0, Ns, alpha_opt):
@@ -62,13 +62,14 @@ def adaptive_parallel_tempering(x, K, N, p, u, u0, Ns, alpha_opt):
     :param x: empty array of result random number
     :param K: number of parallel temperature
     :param N: length of returned random number array
-    :param p: the transition density
+    :param p: proposal distribution
     :param u: target density in different temperature
     :param u0: initial distribution
     :param Ns: every Ns steps, conduct one step of swapping
     :param alpha_opt: desired acceptance rate
-    :return: desired random number sampled from desired distribution
+    :return: the generated Markov chain, acceptance rate of swapping states
     """
+    acceptance = 0
     logT = np.zeros((K-1, ))
     T = np.zeros((K, ))
     T[0] = 1
@@ -89,13 +90,13 @@ def adaptive_parallel_tempering(x, K, N, p, u, u0, Ns, alpha_opt):
                 x_swap = x[i][n + 1]
                 x[i][n + 1] = x[i + 1][n]
                 x[i + 1][n] = x_swap
+                acceptance += 1
             logT[i] += 0.6/(n+1) * (alpha - alpha_opt)
         for i in range(K-1):
             T[i+1] = T[i] + np.exp(logT[i])
-    return x[0]
+    return x[0], acceptance / (N/Ns)
 
 
-acc = 0
 K = 4
 N = 10000
 alpha_opt = 0.234
@@ -111,9 +112,8 @@ x_t = np.linspace(-5, 5, 1000)
 fig = plt.figure(figsize=(20, 7))
 for j, gamma in enumerate(gammas):
     u = [lambda x, T = 1: np.exp(-gamma * (x ** 2 - 1) ** 2 / T)] * K
-    acc = 0
-    xs = adaptive_parallel_tempering(x, K, N, p, u, u0, Ns, alpha_opt)
-    stat = {'acceptance rate': acc / ((N - 1) * K)}
+    xs, acc = adaptive_parallel_tempering(x, K, N, p, u, u0, Ns, alpha_opt)
+    stat = {'acceptance rate': acc}
     print('acceptance rate when gamma=%d: %f' % (gamma, stat['acceptance rate']))
     y_t = u[0](x_t, 1)
     integral = integrate.quad(u[0], -5, 5)[0]
@@ -123,11 +123,10 @@ for j, gamma in enumerate(gammas):
     ax.plot(x_t,  y_t / integral, linewidth=1.5, label=r'$\tilde{f}(x)$')
     ax.set_title('gamma = ' + str(gamma))
     plt.legend()
-    
-    acc = 0
+
     u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
-    xs = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
-    stat = {'acceptance rate': acc / ((N - 1) * K)}
+    xs, acc = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
+    stat = {'acceptance rate': acc}
     print('acceptance rate when gamma=%d: %f' % (gamma, stat['acceptance rate']))
     ax2 = fig.add_subplot(2, 5, 5 + j + 1)
     ax2.hist(xs, bins=100, density=True, label='simple_PT')
@@ -141,9 +140,8 @@ plt.show()
 fig = plt.figure(figsize=(20, 7))
 for j, gamma in enumerate(gammas):
     u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
-    acc = 0
-    xs = full_parallel_tempering(x, K, N, p, u, u0, Ns)
-    stat = {'acceptance rate': acc / ((N - 1) * K)}
+    xs, acc = full_parallel_tempering(x, K, N, p, u, u0, Ns)
+    stat = {'acceptance rate': acc}
     print('acceptance rate when gamma=%d: %f' % (gamma, stat['acceptance rate']))
     y_t = u[0](x_t)
     integral = integrate.quad(u[0], -5, 5)[0]
@@ -153,10 +151,9 @@ for j, gamma in enumerate(gammas):
     ax.plot(x_t, y_t / integral, linewidth=1., label=r'$\tilde{f}(x)$')
     ax.set_title('gamma = ' + str(gamma))
     plt.legend()
-    
-    acc = 0
-    xs = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
-    stat = {'acceptance rate': acc / ((N - 1) * K)}
+
+    xs, acc = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
+    stat = {'acceptance rate': acc}
     print('acceptance rate when gamma=%d: %f' % (gamma, stat['acceptance rate']))
     ax2 = fig.add_subplot(2, 5, 5 + j + 1)
     ax2.hist(xs, bins=100, density=True, label='simple_PT')
@@ -171,17 +168,15 @@ x = np.zeros((K, N))
 fig = plt.figure(figsize=(20, 20))
 for j, gamma in enumerate(gammas):
     u = [lambda x, T = 1: np.exp(-gamma * (x ** 2 - 1) ** 2 / T)] * K
-    acc = 0
-    xs = adaptive_parallel_tempering(x, K, N, p, u, u0, Ns, alpha_opt)
+    xs, acc = adaptive_parallel_tempering(x, K, N, p, u, u0, Ns, alpha_opt)
     r_xs = acf(xs)
     ax = fig.add_subplot(5, 2, 2*j + 1)
     ax.bar(range(len(r_xs)), r_xs, label='adaptive_PT')
     ax.set_title('gamma = ' + str(gamma))
     plt.legend()
-    
-    acc = 0
+
     u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
-    xs = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
+    xs, acc = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
     r_xs = acf(xs)
     ax2 = fig.add_subplot(5, 2, 2*j + 2)
     ax2.bar(range(len(r_xs)), r_xs, label='simple_PT')
@@ -195,17 +190,15 @@ x = np.zeros((K, N))
 fig = plt.figure(figsize=(20, 20))
 for j, gamma in enumerate(gammas):
     u = [lambda x, T = 1: np.exp(-gamma * (x ** 2 - 1) ** 2 / T)] * K
-    acc = 0
-    xs = full_parallel_tempering(x, K, N, p, u, u0, Ns)
+    xs, acc = full_parallel_tempering(x, K, N, p, u, u0, Ns)
     r_xs = acf(xs)
     ax = fig.add_subplot(5, 2, 2*j + 1)
     ax.bar(range(len(r_xs)), r_xs, label='full_PT')
     ax.set_title('gamma = ' + str(gamma))
     plt.legend()
-    
-    acc = 0
+
     u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
-    xs = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
+    xs, acc = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
     r_xs = acf(xs)
     ax2 = fig.add_subplot(5, 2, 2*j + 2)
     ax2.bar(range(len(r_xs)), r_xs, label='simple_PT')
@@ -220,9 +213,8 @@ x = np.zeros((K, N))
 fig = plt.figure(figsize=(20, 30))
 for j, gamma in enumerate(gammas):
     u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
-    acc = 0
-    xs = full_parallel_tempering(x, K, N, p, u, u0, Ns)
-    xs_s = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
+    xs, acc = full_parallel_tempering(x, K, N, p, u, u0, Ns)
+    xs_s, acc = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
     
     ax = fig.add_subplot(10, 1, 2*j + 1)
     ax.plot(xs, label='full_PT')
@@ -241,9 +233,8 @@ x = np.zeros((K, N))
 fig = plt.figure(figsize=(20, 30))
 for j, gamma in enumerate(gammas):
     u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
-    acc = 0
-    xs = adaptive_parallel_tempering(x, K, N, p, u, u0, Ns, alpha_opt)
-    xs_s = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
+    xs, acc = adaptive_parallel_tempering(x, K, N, p, u, u0, Ns, alpha_opt)
+    xs_s, acc = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
     
     ax = fig.add_subplot(10, 1, 2*j + 1)
     ax.plot(xs, label='adaptive_PT')

@@ -1,6 +1,5 @@
 import numpy as np
 import scipy.stats as st
-acc = 0
 
 
 def metropolis_hastings(x, p, u):
@@ -11,13 +10,11 @@ def metropolis_hastings(x, p, u):
     :param u: target density
     :return: next state, at the end, this function return a equivalent desired invariant distribution
     """
-    global acc
     y = p(loc=x)
     ratio = u(y) / u(x)
     alpha = min(1, ratio)
     if st.uniform.rvs() < alpha:
         x_next = y
-        acc += 1
     else:
         x_next = x
     return x_next
@@ -33,8 +30,9 @@ def simple_parallel_tempering(x, K, N, p, u, u0, Ns):
     :param u: target density in different temperature
     :param u0: initial distribution
     :param Ns: every Ns steps, conduct one step of swapping
-    :return: desired random number sampled from desired distribution
+    :return: the generated Markov chain, acceptance rate of swapping states
     """
+    acceptance = 0
     for i in range(K):
         x[i][0] = u0()
     for n in range(N - 1):
@@ -48,7 +46,8 @@ def simple_parallel_tempering(x, K, N, p, u, u0, Ns):
                 x_swap = x[i][n + 1]
                 x[i][n + 1] = x[i + 1][n]
                 x[i + 1][n] = x_swap
-    return x[0]
+                acceptance += 1
+    return x[0], acceptance / ((N-1)/Ns)
 
 
 def random_walk_metropolis(x, N, p, u, u0):
@@ -59,12 +58,12 @@ def random_walk_metropolis(x, N, p, u, u0):
     :param p: the transition density
     :param u: target density in different temperature
     :param u0: initial distribution
-    :return: desired random number sampled from desired distribution
+    :return: the generated Markov chain
     """
     x[0] = u0()
     for n in range(N - 1):
         x[n + 1] = metropolis_hastings(x[n], p, u)
-    return x[0]
+    return x
 
 
 def acf(x, k=41):

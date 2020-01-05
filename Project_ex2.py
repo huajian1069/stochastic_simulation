@@ -2,12 +2,11 @@ import numpy as np
 import scipy.stats as st
 import matplotlib.pyplot as plt
 import scipy.integrate as integrate
-from Project_utils import acf, random_walk_metropolis, simple_parallel_tempering
+from Project_utils import *
 import warnings
 warnings.simplefilter("ignore")
 
 
-acc = 0
 K = 4
 N = 10000
 p = [lambda loc: st.norm.rvs(loc=loc, scale=3)] * K
@@ -22,16 +21,14 @@ x_t = np.linspace(-5, 5, 1000)
 fig = plt.figure(figsize=(20, 7))
 for j, gamma in enumerate(gammas):
     u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
-    acc = 0
-    xs = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
+    xs, acc = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
     xs_walk = random_walk_metropolis(x_walk, N, p[0], u[0], u0)
-    stat = {'acceptance rate': acc / ((N - 1) * K)}
+    stat = {'acceptance rate': acc}
     print('acceptance rate when gamma=%d: %f' % (gamma, stat['acceptance rate']))
     y_t = u[0](x_t)
     integral = integrate.quad(u[0], -5, 5)[0]
 
     ax = fig.add_subplot(2, 5, j + 1)
-   # ax.hist(xs_walk, bins=100, density=True, label='Walk')
     ax.hist(xs, bins=100, density=True, label='simple_PT')
     ax.plot(x_t, y_t / integral, linewidth=1.5, label=r'$\tilde{f}(x)$')
     ax.set_title('gamma = ' + str(gamma))
@@ -50,8 +47,7 @@ x = np.zeros((K, N))
 fig = plt.figure(figsize=(20, 20))
 for j, gamma in enumerate(gammas):
     u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
-    acc = 0
-    xs = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
+    xs, acc = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
     xs_walk = random_walk_metropolis(x_walk, N, p[0], u[0], u0)
     r_xs = acf(xs)
     r_walk = acf(xs_walk)
@@ -74,7 +70,7 @@ fig = plt.figure(figsize=(20, 30))
 for j, gamma in enumerate(gammas):
     u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
     acc = 0
-    xs = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
+    xs, acc = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
     xs_walk = random_walk_metropolis(x_walk, N, p[0], u[0], u0)
 
     ax = fig.add_subplot(10, 1, 2*j + 1)
@@ -96,8 +92,7 @@ for j, gamma in enumerate(gammas):
     ess_xs = 0
     ess_walk = 0
     for l in range(5):
-        acc = 0
-        xs = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
+        xs, acc = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
         xs_walk = random_walk_metropolis(x_walk, N, p[0], u[0], u0)
         ess_xs += np.abs(N/(1+2*(acf(xs, 1000).sum()-1)))
         ess_walk += np.abs(N/(1+2*(acf(xs_walk, 1000).sum()-1)))
