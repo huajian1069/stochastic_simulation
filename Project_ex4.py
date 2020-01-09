@@ -1,249 +1,210 @@
-import numpy as np
-import scipy.stats as st
-import matplotlib.pyplot as plt
-import scipy.integrate as integrate
-from Project_utils import acf, simple_parallel_tempering, metropolis_hastings
+from Project_utils import *
 import warnings
+
 warnings.simplefilter("ignore")
+np.random.seed(187)
 
-
-def metropolis_hastings_adaptive(x, p, u, T):
-    """
-    generate proposal from p, accept or reject it based on calculating the
-    :param x: current state
-    :param p: the transition density
-    :param u: target density
-    :param T: temperature of this parallel distribution
-    :return: next state, at the end, this function return a equivalent desired invariant distribution
-    """
-    y = p(loc=x)
-    ratio = u(y, T) / u(x, T)
-    alpha = min(1, ratio)
-    if st.uniform.rvs() < alpha:
-        x_next = y
-    else:
-        x_next = x
-    return x_next
-
-
-def full_parallel_tempering(x, K, N, p, u, u0, Ns):
-    """
-    parallel tempering algorithm
-    :param x: empty array of result random number
-    :param K: number of parallel temperature
-    :param N: length of returned random number array
-    :param p: the transition density
-    :param u: target density in different temperature
-    :param u0: initial distribution
-    :param Ns: every Ns steps, conduct one step of swapping
-    :return: desired random number sampled from desired distribution
-    """
-    acceptance = 0
-    for i in range(K):
-        x[i][0] = u0()
-    for n in range(N - 1):
-        for k in range(K):
-            x[k][n + 1] = metropolis_hastings(x[k][n], p[k], u[k])
-        if n % Ns == 0:
-            for i in range(K-1):
-                ratio = u[i + 1](x[i][n + 1]) * u[i](x[i + 1][n + 1]) / (u[i](x[i][n + 1]) * u[i + 1](x[i + 1][n + 1]))
-                alpha = min(1, ratio)
-                if st.uniform.rvs() < alpha:
-                    x_swap = x[i][n + 1]
-                    x[i][n + 1] = x[i + 1][n]
-                    x[i + 1][n] = x_swap
-                    acceptance += 1
-    return x[0], acceptance / ((K-1) * N / Ns)
-
-
-def adaptive_parallel_tempering(x, K, N, p, u, u0, Ns, alpha_opt):
-    """
-    parallel tempering algorithm
-    :param x: empty array of result random number
-    :param K: number of parallel temperature
-    :param N: length of returned random number array
-    :param p: proposal distribution
-    :param u: target density in different temperature
-    :param u0: initial distribution
-    :param Ns: every Ns steps, conduct one step of swapping
-    :param alpha_opt: desired acceptance rate
-    :return: the generated Markov chain, acceptance rate of swapping states
-    """
-    acceptance = 0
-    logT = np.zeros((K-1, ))
-    T = np.zeros((K, ))
-    T[0] = 1
-    for i in range(K):
-        x[i][0] = u0()
-    for i in range(K-1):
-        logT[i] = 1
-        T[i+1] = T[i] + np.exp(logT[i])
-    for n in range(N - 1):
-        for k in range(K):
-            x[k][n + 1] = metropolis_hastings_adaptive(x[k][n], p[k], u[k], T[k])
-        if n % Ns == 0:
-            i = st.randint(0, K-1).rvs()
-            ratio = u[i + 1](x[i][n + 1], T[i+1]) * u[i](x[i + 1][n + 1], T[i]) \
-                    / (u[i](x[i][n + 1], T[i]) * u[i + 1](x[i + 1][n + 1], T[i+1]))
-            alpha = min(1, ratio)
-            if st.uniform.rvs() < alpha:
-                x_swap = x[i][n + 1]
-                x[i][n + 1] = x[i + 1][n]
-                x[i + 1][n] = x_swap
-                acceptance += 1
-            logT[i] += 0.6/(n+1) * (alpha - alpha_opt)
-        for i in range(K-1):
-            T[i+1] = T[i] + np.exp(logT[i])
-    return x[0], acceptance / (N/Ns)
-
-
+alpha_opt = 0.234
+D = 1
 K = 4
 N = 10000
-alpha_opt = 0.234
 p = [lambda loc: st.norm.rvs(loc=loc, scale=3)] * K
-gammas = [1, 2, 4, 8, 16]
-a = 2
 u0 = st.uniform(loc=-3, scale=6).rvs
 Ns = 1
+T_factor = 2
+gammas = [1, 2, 4, 8, 16]
+experiment_control_A_1 = [None] * len(gammas)
+experiment_control_A_2 = [None] * len(gammas)
+experiment_contrast_A = [None] * len(gammas)
+
+# get data from disk or generate
+val = input('Enter y to read data from disk, n to regenerate data\n')
+for j, gamma in enumerate(gammas):
+    file_full_name = 'data/ex4/full_gamma' + str(gamma) + '.obj'
+    file_adaptive_name = 'data/ex4/adaptive_gamma' + str(gamma) + '.obj'
+    file_simple_name = 'data/ex4/simple_gamma' + str(gamma) + '.obj'
+    u = [lambda x, T=k: np.exp(-gamma * (x ** 2 - 1) ** 2 / (T_factor ** T)) for k in range(K)]
+    u_adp = [lambda x, T=1: np.exp(-gamma * (x ** 2 - 1) ** 2 / T)] * K
+    experiment_control_A_1[j] = ParallelTempering(D, K, N, p, u, u0, Ns)
+    experiment_control_A_2[j] = ParallelTempering(D, K, N, p, u_adp, u0, Ns, alpha_opt)
+    experiment_contrast_A[j] = ParallelTempering(D, K, N, p, u, u0, Ns)
+    if val == 'n':
+        # generate data from Markov Chain
+        _, acc = experiment_control_A_1[j].generateMarkovChain(mode='full PT')
+        print('Full PT: swapping acceptance rate when gamma=%d: %f' % (gamma, acc))
+        _, acc = experiment_control_A_2[j].generateMarkovChain(mode='adaptive PT')
+        print('Adaptive PT: swapping acceptance rate when gamma=%d: %f' % (gamma, acc))
+        _, acc = experiment_contrast_A[j].generateMarkovChain(mode='simple PT')
+        print('Simple PT: swapping acceptance rate when gamma=%d: %f' % (gamma, acc))
+        experiment_control_A_1[j].save(file_full_name)
+        experiment_control_A_2[j].save(file_adaptive_name)
+        experiment_contrast_A[j].save(file_simple_name)
+    else:
+        # load data from disk
+        experiment_control_A_1[j].load(file_full_name)
+        experiment_control_A_2[j].load(file_adaptive_name)
+        experiment_contrast_A[j].load(file_simple_name)
 
 # plot the histograms of samples
-x = np.zeros((K, N))
-x_t = np.linspace(-5, 5, 1000)
-fig = plt.figure(figsize=(20, 7))
+fig = plt.figure(figsize=(30, 12))
 for j, gamma in enumerate(gammas):
-    u = [lambda x, T = 1: np.exp(-gamma * (x ** 2 - 1) ** 2 / T)] * K
-    xs, acc = adaptive_parallel_tempering(x, K, N, p, u, u0, Ns, alpha_opt)
-    stat = {'acceptance rate': acc}
-    print('acceptance rate when gamma=%d: %f' % (gamma, stat['acceptance rate']))
-    y_t = u[0](x_t, 1)
-    integral = integrate.quad(u[0], -5, 5)[0]
-    
-    ax = fig.add_subplot(2, 5, j + 1)
-    ax.hist(xs, bins=100, density=True, label='adaptive_PT')
-    ax.plot(x_t,  y_t / integral, linewidth=1.5, label=r'$\tilde{f}(x)$')
-    ax.set_title('gamma = ' + str(gamma))
-    plt.legend()
-
-    u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
-    xs, acc = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
-    stat = {'acceptance rate': acc}
-    print('acceptance rate when gamma=%d: %f' % (gamma, stat['acceptance rate']))
-    ax2 = fig.add_subplot(2, 5, 5 + j + 1)
-    ax2.hist(xs, bins=100, density=True, label='simple_PT')
-    ax2.plot(x_t, y_t / integral, linewidth=1.5, label=r'$\tilde{f}(x)$')
-    ax2.set_title('gamma = ' + str(gamma))
-    plt.legend()
-plt.savefig('figures/project_ex4_adaptive_hist.png')
-plt.show()
-
-
-fig = plt.figure(figsize=(20, 7))
-for j, gamma in enumerate(gammas):
-    u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
-    xs, acc = full_parallel_tempering(x, K, N, p, u, u0, Ns)
-    stat = {'acceptance rate': acc}
-    print('acceptance rate when gamma=%d: %f' % (gamma, stat['acceptance rate']))
-    y_t = u[0](x_t)
-    integral = integrate.quad(u[0], -5, 5)[0]
-
-    ax = fig.add_subplot(2, 5, j + 1)
-    ax.hist(xs, bins=100, density=True, label='full_PT')
-    ax.plot(x_t, y_t / integral, linewidth=1., label=r'$\tilde{f}(x)$')
-    ax.set_title('gamma = ' + str(gamma))
-    plt.legend()
-
-    xs, acc = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
-    stat = {'acceptance rate': acc}
-    print('acceptance rate when gamma=%d: %f' % (gamma, stat['acceptance rate']))
-    ax2 = fig.add_subplot(2, 5, 5 + j + 1)
-    ax2.hist(xs, bins=100, density=True, label='simple_PT')
-    ax2.plot(x_t, y_t / integral, linewidth=1., label=r'$\tilde{f}(x)$')
-    ax2.set_title('gamma = ' + str(gamma))
-    plt.legend()
-plt.savefig('figures/project_ex4_full_hist.png')
+    ax = fig.add_subplot(3, 5, j + 1)
+    experiment_control_A_1[j].plot_hist(ax, 'gamma = ' + str(gamma))
+    ax = fig.add_subplot(3, 5, j + 5 + 1)
+    experiment_control_A_2[j].plot_hist(ax, 'gamma = ' + str(gamma))
+    ax = fig.add_subplot(3, 5, j + 10 + 1)
+    experiment_contrast_A[j].plot_hist(ax, 'gamma = ' + str(gamma))
+plt.savefig('figures/ex4/hist_1d.png')
 plt.show()
 
 # plot the auto-correlation plots
-x = np.zeros((K, N))
-fig = plt.figure(figsize=(20, 20))
+fig = plt.figure(figsize=(30, 12))
 for j, gamma in enumerate(gammas):
-    u = [lambda x, T = 1: np.exp(-gamma * (x ** 2 - 1) ** 2 / T)] * K
-    xs, acc = adaptive_parallel_tempering(x, K, N, p, u, u0, Ns, alpha_opt)
-    r_xs = acf(xs)
-    ax = fig.add_subplot(5, 2, 2*j + 1)
-    ax.bar(range(len(r_xs)), r_xs, label='adaptive_PT')
-    ax.set_title('gamma = ' + str(gamma))
-    plt.legend()
-
-    u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
-    xs, acc = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
-    r_xs = acf(xs)
-    ax2 = fig.add_subplot(5, 2, 2*j + 2)
-    ax2.bar(range(len(r_xs)), r_xs, label='simple_PT')
-    ax2.set_title('gamma = ' + str(gamma))
-    plt.legend()
-    
-plt.savefig('figures/project_ex4_adaptive_acf.png')
+    ax = fig.add_subplot(3, 5, j + 1)
+    experiment_control_A_1[j].plot_acf(ax, 'gamma = ' + str(gamma))
+    ax = fig.add_subplot(3, 5, 5 + j + 1)
+    experiment_control_A_2[j].plot_acf(ax, 'gamma = ' + str(gamma))
+    ax = fig.add_subplot(3, 5, 10 + j + 1)
+    experiment_contrast_A[j].plot_acf(ax, 'gamma = ' + str(gamma))
+plt.savefig('figures/ex4/acf_1d.png')
 plt.show()
 
-x = np.zeros((K, N))
-fig = plt.figure(figsize=(20, 20))
+# plot the trace-plots
+fig = plt.figure(figsize=(15, 30))
 for j, gamma in enumerate(gammas):
-    u = [lambda x, T = 1: np.exp(-gamma * (x ** 2 - 1) ** 2 / T)] * K
-    xs, acc = full_parallel_tempering(x, K, N, p, u, u0, Ns)
-    r_xs = acf(xs)
-    ax = fig.add_subplot(5, 2, 2*j + 1)
-    ax.bar(range(len(r_xs)), r_xs, label='full_PT')
-    ax.set_title('gamma = ' + str(gamma))
-    plt.legend()
-
-    u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
-    xs, acc = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
-    r_xs = acf(xs)
-    ax2 = fig.add_subplot(5, 2, 2*j + 2)
-    ax2.bar(range(len(r_xs)), r_xs, label='simple_PT')
-    ax2.set_title('gamma = ' + str(gamma))
-    plt.legend()
-plt.savefig('figures/project_ex4_full_acf.png')
+    ax = fig.add_subplot(15, 1, j + 1)
+    experiment_control_A_1[j].plot_trace(ax, 'gamma = ' + str(gamma))
+    ax = fig.add_subplot(15, 1, 5 + j + 1)
+    experiment_control_A_2[j].plot_trace(ax, 'gamma = ' + str(gamma))
+    ax = fig.add_subplot(15, 1, 10 + j + 1)
+    experiment_contrast_A[j].plot_trace(ax, 'gamma = ' + str(gamma))
+plt.savefig('figures/ex4/trace_1d.png')
 plt.show()
 
-
-# plot the trace-plots for full PT
-x = np.zeros((K, N))
-fig = plt.figure(figsize=(20, 30))
+# compute the effective sample size
+max_iter = 5
 for j, gamma in enumerate(gammas):
-    u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
-    xs, acc = full_parallel_tempering(x, K, N, p, u, u0, Ns)
-    xs_s, acc = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
-    
-    ax = fig.add_subplot(10, 1, 2*j + 1)
-    ax.plot(xs, label='full_PT')
-    ax.set_title('gamma = ' + str(gamma))
-    plt.legend()
+    ess_full = experiment_control_A_1[j].get_effective_sample_size()
+    ess_adap = experiment_control_A_2[j].get_effective_sample_size()
+    ess_simple = experiment_contrast_A[j].get_effective_sample_size()
+    for l in range(max_iter - 1):
+        experiment_control_A_1[j].generateMarkovChain('full PT')
+        experiment_control_A_2[j].generateMarkovChain('adaptive PT')
+        experiment_contrast_A[j].generateMarkovChain('simple PT')
+        ess_full += experiment_control_A_1[j].get_effective_sample_size()
+        ess_adap += experiment_control_A_2[j].get_effective_sample_size()
+        ess_simple += experiment_contrast_A[j].get_effective_sample_size()
+    print('average of ' + str(max_iter) + ' times of running')
+    print('effective sample size with gamma = %d generated by full PT: %f' % (gamma, ess_full / max_iter))
+    print('effective sample size with gamma = %d generated by adaptive PT: %f' % (gamma, ess_adap / max_iter))
+    print('effective sample size with gamma = %d generated by simple PT: %f' % (gamma, ess_simple / max_iter))
 
-    ax2 = fig.add_subplot(10, 1, 2*j + 2)
-    ax2.plot(xs_s, label='simple_PT')
-    ax2.set_title('gamma = ' + str(gamma))
-    plt.legend()
-plt.savefig('figures/project_ex4_full_trace_plot.png')
+alpha_opt = 0.234
+D = 2
+K = 4
+N = 10000
+p = [lambda loc: st.multivariate_normal.rvs(mean=loc, cov=np.array([[1, 0], [0, 0.5]]))] * K
+u0 = st.uniform(loc=np.array([-2, -1]), scale=np.array([15, 4])).rvs
+Ns = 1
+T_factor = 2
+u = [lambda x, T=k: np.exp(post(x) / T_factor ** T) for k in range(K)]
+experiment_control_B_1 = ParallelTempering(D, K, N, p, u, u0, Ns)
+experiment_control_B_2 = ParallelTempering(D, K, N, p, u, u0, Ns, alpha_opt)
+experiment_contrast_B = ParallelTempering(D, K, N, p, u, u0, Ns)
+file_full_2d_name = 'data/ex4/full_csqi.obj'
+file_adaptive_2d_name = 'data/ex4/adpative_csqi.obj'
+file_simple_2d_name = 'data/ex4/simple_csqi.obj'
+
+# get data from disk or generate
+val = input('Enter y to read data from disk, n to regenerate data\n')
+if val == 'n':
+    # generate data from Markov Chain
+    _, acc = experiment_control_B_1.generateMarkovChain(mode='full PT')
+    print('Full PT: swapping acceptance rate in multi-modal distribution: %f' % (acc))
+    _, acc = experiment_control_B_2.generateMarkovChain(mode='adaptive PT')
+    print('Adaptive PT: swapping acceptance rate in multi-modal distribution: %f' % (acc))
+    _, acc = experiment_contrast_B.generateMarkovChain(mode='simple PT')
+    print('simple PT: swapping acceptance rate in multi-modal distribution: %f' % (acc))
+    experiment_control_B_1.save(file_full_2d_name)
+    experiment_control_B_2.save(file_adaptive_2d_name)
+    experiment_contrast_B.save(file_simple_2d_name)
+else:
+    # load from disk
+    experiment_control_B_1.load(file_full_2d_name)
+    experiment_control_B_2.load(file_adaptive_2d_name)
+    experiment_contrast_B.load(file_simple_2d_name)
+
+# plot the histograms of samples
+fig = plt.figure(figsize=(20, 7))
+ax = fig.add_subplot(3, 1, 1)
+experiment_control_B_1.plot_hist2d(ax, "multi-modal distribution")
+ax = fig.add_subplot(3, 1, 2)
+experiment_control_B_2.plot_hist2d(ax, "multi-modal distribution")
+ax = fig.add_subplot(3, 1, 3)
+experiment_contrast_B.plot_hist2d(ax, "multi-modal distribution")
+plt.savefig('figures/ex4/csqi_hist2d.png')
 plt.show()
 
-# plot the trace-plots for adaptive PT
-x = np.zeros((K, N))
-fig = plt.figure(figsize=(20, 30))
-for j, gamma in enumerate(gammas):
-    u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
-    xs, acc = adaptive_parallel_tempering(x, K, N, p, u, u0, Ns, alpha_opt)
-    xs_s, acc = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
-    
-    ax = fig.add_subplot(10, 1, 2*j + 1)
-    ax.plot(xs, label='adaptive_PT')
-    ax.set_title('gamma = ' + str(gamma))
-    plt.legend()
-
-    ax2 = fig.add_subplot(10, 1, 2*j + 2)
-    ax2.plot(xs_s, label='simple_PT')
-    ax2.set_title('gamma = ' + str(gamma))
-    plt.legend()
-plt.savefig('figures/project_ex4_adaptive_trace_plot.png')
+# plot the auto-correlation plots
+fig = plt.figure(figsize=(20, 7))
+ax1, ax2 = fig.add_subplot(2, 3, 1), fig.add_subplot(2, 3, 4)
+experiment_control_B_1.plot_acf2d([ax1, ax2], 'multi-modal distribution', k=100)
+ax1, ax2 = fig.add_subplot(2, 3, 2), fig.add_subplot(2, 3, 5)
+experiment_control_B_2.plot_acf2d([ax1, ax2], 'multi-modal distribution', k=100)
+ax1, ax2= fig.add_subplot(2, 3, 3), fig.add_subplot(2, 3, 6)
+experiment_contrast_B.plot_acf2d([ax1, ax2], 'multi-modal distribution', k=100)
+plt.savefig('figures/ex4/csqi_acf2d.png')
 plt.show()
+
+# plot the trace-plots
+fig = plt.figure(figsize=(20, 7))
+ax = fig.add_subplot(3, 1, 1)
+experiment_control_B_1.plot_trace2d(ax, 'multi-modal distribution')
+ax = fig.add_subplot(3, 1, 2)
+experiment_control_B_2.plot_trace2d(ax, 'multi-modal distribution')
+ax = fig.add_subplot(3, 1, 3)
+experiment_contrast_B.plot_trace2d(ax, 'multi-modal distribution')
+plt.savefig('figures/ex4/csqi_trace2d.png')
+plt.show()
+
+# compute the efficient sample size
+max_iter = 5
+ess_full = experiment_control_B_1.get_effective_sample_size_2d()
+ess_adap = experiment_control_B_2.get_effective_sample_size_2d()
+ess_simple = experiment_contrast_B.get_effective_sample_size_2d()
+for l in range(max_iter-1):
+    experiment_control_B_1.generateMarkovChain(mode='full PT')
+    experiment_control_B_2.generateMarkovChain(mode='adaptive PT')
+    experiment_contrast_B.generateMarkovChain(mode='simple PT')
+    ess_full += experiment_control_B_1.get_effective_sample_size_2d()
+    ess_adap += experiment_control_B_2.get_effective_sample_size_2d()
+    ess_simple += experiment_contrast_B.get_effective_sample_size_2d()
+print('average of ' + str(max_iter) + ' times of running')
+print('effective sample size of (theta1, theta2) for Markov chain generated by full PT: (%f, %f)' % (ess_full[0] / max_iter, ess_full[1] / max_iter))
+print('effective sample size of (theta1, theta2) for Markov chain generated by adaptive PT: (%f, %f)' % (ess_adap[0] / max_iter, ess_adap[1] / max_iter))
+print('effective sample size of (theta1, theta2) for Markov chain generated by simple PT: (%f, %f)' % (ess_simple[0] / max_iter, ess_simple[1] / max_iter))
+
+
+'''
+1d distribution
+average of 5times of running
+effective sample size with gamma = 1 generated by full PT: 7943.426312
+effective sample size with gamma = 1 generated by adaptive PT: 2968.091286
+effective sample size with gamma = 1 generated by simple PT: 3790.643926
+average of 5times of running
+effective sample size with gamma = 2 generated by full PT: 3253.115917
+effective sample size with gamma = 2 generated by adaptive PT: 3605.933870
+effective sample size with gamma = 2 generated by simple PT: 3773.710266
+average of 5times of running
+effective sample size with gamma = 4 generated by full PT: 3466.632831
+effective sample size with gamma = 4 generated by adaptive PT: 1885.750283
+effective sample size with gamma = 4 generated by simple PT: 2268.379143
+average of 5times of running
+effective sample size with gamma = 8 generated by full PT: 2982.661723
+effective sample size with gamma = 8 generated by adaptive PT: 1384.421461
+effective sample size with gamma = 8 generated by simple PT: 1474.533959
+average of 5times of running
+effective sample size with gamma = 16 generated by full PT: 1207.474333
+effective sample size with gamma = 16 generated by adaptive PT: 4200.688337
+effective sample size with gamma = 16 generated by simple PT: 19627.768833
+'''

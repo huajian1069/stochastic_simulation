@@ -1,103 +1,82 @@
-import numpy as np
-import scipy.stats as st
-import matplotlib.pyplot as plt
-import scipy.integrate as integrate
 from Project_utils import *
 import warnings
 warnings.simplefilter("ignore")
 np.random.seed(12)
 
+D = 1
 K = 4
 N = 10000
 p = [lambda loc: st.norm.rvs(loc=loc, scale=3)] * K
-gammas = [1, 2, 4, 8, 16]
-a = 2
 u0 = st.uniform(loc=-3, scale=6).rvs
 Ns = 1
-x = np.zeros((K, N))
-x_walk = np.zeros((N,))
-x_t = np.linspace(-5, 5, 1000)
-# plot the histograms of samples
-fig = plt.figure(figsize=(25, 10))
+T_factor = 2
+gammas = [1, 2, 4, 8, 16]
+experiment_control = [None] * len(gammas)
+experiment_contrast = [None] * len(gammas)
+
+
+val = input('Enter y to read data from disk, n to regenerate data\n')
+
+# generate data from Markov Chain
 for j, gamma in enumerate(gammas):
-    u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
-    xs, acc = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
-    xs_walk = random_walk_metropolis(x_walk, N, p[0], u[0], u0)
-    stat = {'acceptance rate': acc}
-    print('acceptance rate when gamma=%d: %f' % (gamma, stat['acceptance rate']))
-    y_t = u[0](x_t)
-    integral = integrate.quad(u[0], -5, 5)[0]
+    file_simple_name = 'data/ex2/simple_gamma' + str(gamma) + '.obj'
+    file_walk_name = 'data/ex2/walk_gamma' + str(gamma) + '.obj'
+    u = [lambda x, T=k: np.exp(-gamma * (x ** 2 - 1) ** 2 / (T_factor ** T)) for k in range(K)]
+    experiment_control[j] = ParallelTempering(D, K, N, p, u, u0, Ns)
+    experiment_contrast[j] = ParallelTempering(D, K, N, p, u, u0, Ns)
+    if val == 'n':
+        _, acc = experiment_control[j].generateMarkovChain(mode='simple PT')
+        print('Simple PT: swapping acceptance rate when gamma=%d: %f' % (gamma, acc))
+        experiment_contrast[j].generateMarkovChain(mode='without PT')
+        experiment_control[j].save(file_simple_name)
+        experiment_contrast[j].save(file_walk_name)
+    else:
+        experiment_control[j].load(file_simple_name)
+        experiment_contrast[j].load(file_walk_name)
 
+# plot the histograms of samples
+fig = plt.figure(figsize=(30, 8))
+for j, gamma in enumerate(gammas):
     ax = fig.add_subplot(2, 5, j + 1)
-    ax.hist(xs, bins=100, density=True, label='simple_PT')
-    ax.plot(x_t, y_t / integral, linewidth=1.5, label=r'$\tilde{f}(x)$')
-    ax.set_title('gamma = ' + str(gamma))
-    plt.legend()
-
-    ax2 = fig.add_subplot(2, 5, 5+ j + 1)
-    ax2.hist(xs_walk, bins=100, density=True, label='Walk')
-    ax2.plot(x_t, y_t / integral, linewidth=1.5, label=r'$\tilde{f}(x)$')
-    ax2.set_title('gamma = ' + str(gamma))
-    plt.legend()
-plt.savefig('figures/project_ex2_hist.png')
+    experiment_control[j].plot_hist(ax, 'gamma = ' + str(gamma))
+    ax = fig.add_subplot(2, 5, 5 + j + 1)
+    experiment_contrast[j].plot_hist(ax, 'gamma = ' + str(gamma))
+plt.savefig('figures/ex2/hist.png')
 plt.show()
 
 # plot the auto-correlation plots
-x = np.zeros((K, N))
-fig = plt.figure(figsize=(20, 20))
+fig = plt.figure(figsize=(30, 8))
 for j, gamma in enumerate(gammas):
-    u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
-    xs, acc = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
-    xs_walk = random_walk_metropolis(x_walk, N, p[0], u[0], u0)
-    r_xs = acf(xs)
-    r_walk = acf(xs_walk)
-
-    ax = fig.add_subplot(5, 2, 2*j + 1)
-    ax.bar(range(len(r_xs)), r_xs, label='simple_PT')
-    ax.set_title('gamma = ' + str(gamma))
-    plt.legend()
-
-    ax2 = fig.add_subplot(5, 2, 2*j + 2)
-    ax2.bar(range(len(r_walk)), r_walk, label='Walk')
-    ax2.set_title('gamma = ' + str(gamma))
-    plt.legend()
-plt.savefig('figures/project_ex2_auto_correlation.png')
+    ax = fig.add_subplot(2, 5, j + 1)
+    experiment_control[j].plot_acf(ax, 'gamma = ' + str(gamma))
+    ax = fig.add_subplot(2, 5, 5 + j + 1)
+    experiment_contrast[j].plot_acf(ax, 'gamma = ' + str(gamma))
+plt.savefig('figures/ex2/auto_correlation.png')
 plt.show()
 
 # plot the trace-plots
-x = np.zeros((K, N))
-fig = plt.figure(figsize=(15, 25))
+fig = plt.figure(figsize=(15, 20))
 for j, gamma in enumerate(gammas):
-    u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
-    acc = 0
-    xs, acc = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
-    xs_walk = random_walk_metropolis(x_walk, N, p[0], u[0], u0)
-
-    ax = fig.add_subplot(10, 1, 2*j + 1)
-    ax.plot(xs, label='simple_PT')
-    ax.set_title('gamma = ' + str(gamma))
-    plt.legend()
-
-    ax2 = fig.add_subplot(10, 1, 2*j + 2)
-    ax2.plot(xs_walk, label='Walk')
-    ax2.set_title('gamma = ' + str(gamma))
-    plt.legend()
-plt.savefig('figures/project_ex2_trace_plot.png')
+    ax = fig.add_subplot(10, 1, j + 1)
+    experiment_control[j].plot_trace(ax, 'gamma = ' + str(gamma))
+    ax = fig.add_subplot(10, 1, j + 6)
+    experiment_contrast[j].plot_trace(ax, 'gamma = ' + str(gamma))
+plt.savefig('figures/ex2/trace_plot.png')
 plt.show()
 
 # compute the effective sample size
-x = np.zeros((K, N))
+max_iter = 5
 for j, gamma in enumerate(gammas):
-    u = [lambda x, i=i: np.exp(-gamma * (x ** 2 - 1) ** 2 / (a ** i)) for i in range(K)]
-    ess_xs = 0
-    ess_walk = 0
-    for l in range(5):
-        xs, acc = simple_parallel_tempering(x, K, N, p, u, u0, Ns)
-        xs_walk = random_walk_metropolis(x_walk, N, p[0], u[0], u0)
-        ess_xs += np.abs(N/(1+2*(acf(xs, 1000).sum()-1)))
-        ess_walk += np.abs(N/(1+2*(acf(xs_walk, 1000).sum()-1)))
-    print('effective sample size for Markov chain generated by simple PT: %f' % (ess_xs/5))
-    print('effective sample size for Markov chain generated by random walk MH: %f' % (ess_walk/5))
+    ess_xs = experiment_control[j].get_effective_sample_size()
+    ess_walk = experiment_contrast[j].get_effective_sample_size()
+    for l in range(max_iter-1):
+        experiment_control[j].generateMarkovChain('simple PT')
+        experiment_contrast[j].generateMarkovChain('without PT')
+        ess_xs += experiment_control[j].get_effective_sample_size()
+        ess_walk += experiment_contrast[j].get_effective_sample_size()
+    print('average of ' + str(max_iter) + 'times of running')
+    print('effective sample size with gamma = %d generated by simple PT: %f' % (gamma, ess_xs / max_iter))
+    print('effective sample size with gamma = %d generated by random walk MH: %f' % (gamma, ess_walk / max_iter))
 
 '''
 gamma = 1
@@ -119,4 +98,19 @@ effective sample size for Markov chain generated by random walk MH: 862.148858
 gamma = 16
 effective sample size for Markov chain generated by simple PT: 8534.720071
 effective sample size for Markov chain generated by random walk MH: 388.920264
+'''
+
+
+'''
+effective sample size with gamma = 1 generated by simple PT: 4899.197425
+effective sample size with gamma = 1 generated by random walk MH: 2795.203822
+effective sample size with gamma = 2 generated by simple PT: 2776.139776
+effective sample size with gamma = 2 generated by random walk MH: 8654.918707
+effective sample size with gamma = 4 generated by simple PT: 1054.132880
+effective sample size with gamma = 4 generated by random walk MH: 4617.525633
+effective sample size with gamma = 8 generated by simple PT: 1092.138501
+effective sample size with gamma = 8 generated by random walk MH: 651.345070
+effective sample size with gamma = 16 generated by simple PT: 1701.627374
+effective sample size with gamma = 16 generated by random walk MH: 458.563672
+
 '''
