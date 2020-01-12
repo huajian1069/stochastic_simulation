@@ -110,11 +110,11 @@ class ParallelTempering:
         ax.legend()
 
     def get_effective_sample_size(self):
-        return np.abs(self.N / (1+2*(np.abs(acf(self.xs, 1000)).sum()-1))
+        return np.abs(self.N / (1+2*(np.abs(acf(self.xs, 1000)).sum()-1)))
 
     def get_effective_sample_size_2d(self):
-        return np.abs(self.N / (1+2*(np.abs(acf(self.xs[:,0], 1000)).sum()-1)), np.abs(
-            self.N / (1+2*(np.abs(acf(self.xs[:,1], 1000)).sum()-1))
+        return np.abs(self.N / (1+2*(np.abs(acf(self.xs[:, 0], 1000)).sum()-1))), np.abs(
+            self.N / (1+2*(np.abs(acf(self.xs[:, 1], 1000)).sum()-1)))
 
 
 def metropolis_hastings(x, p, u):
