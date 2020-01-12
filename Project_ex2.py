@@ -9,13 +9,13 @@ N = 10000
 p = [lambda loc: st.norm.rvs(loc=loc, scale=3)] * K
 u0 = st.uniform(loc=-3, scale=6).rvs
 Ns = 1
-T_factor = 2
+T_factor = 3.75
 gammas = [1, 2, 4, 8, 16]
 experiment_control = [None] * len(gammas)
 experiment_contrast = [None] * len(gammas)
 
 
-val = input('Enter y to read data from disk, n to regenerate data\n')
+val = input('Enter "y" to read data from disk, "n" to regenerate data\n')
 
 # generate data from Markov Chain
 for j, gamma in enumerate(gammas):
@@ -65,7 +65,7 @@ plt.savefig('figures/ex2/trace_plot.png')
 plt.show()
 
 # compute the effective sample size
-max_iter = 5
+max_iter = 1
 for j, gamma in enumerate(gammas):
     ess_xs = experiment_control[j].get_effective_sample_size()
     ess_walk = experiment_contrast[j].get_effective_sample_size()

@@ -108,6 +108,7 @@ u0 = st.uniform(loc=np.array([-2, -1]), scale=np.array([15, 4])).rvs
 Ns = 1
 T_factor = 2
 u = [lambda x, T=k: np.exp(post(x) / T_factor ** T) for k in range(K)]
+u_adp = [lambda x, T=1: np.exp(post(x) / T)] * K
 experiment_control_B_1 = ParallelTempering(D, K, N, p, u, u0, Ns)
 experiment_control_B_2 = ParallelTempering(D, K, N, p, u, u0, Ns, alpha_opt)
 experiment_contrast_B = ParallelTempering(D, K, N, p, u, u0, Ns)
@@ -168,7 +169,7 @@ plt.savefig('figures/ex4/csqi_trace2d.png')
 plt.show()
 
 # compute the efficient sample size
-max_iter = 5
+max_iter = 1
 ess_full = experiment_control_B_1.get_effective_sample_size_2d()
 ess_adap = experiment_control_B_2.get_effective_sample_size_2d()
 ess_simple = experiment_contrast_B.get_effective_sample_size_2d()

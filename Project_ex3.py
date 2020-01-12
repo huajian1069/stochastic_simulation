@@ -7,10 +7,10 @@ np.random.seed(12)
 D = 2
 K = 4
 N = 10000
-p = [lambda loc: st.multivariate_normal.rvs(mean=loc, cov=np.array([[1, 0], [0, 0.5]]))] * K
-u0 = st.uniform(loc=np.array([-2, -1]), scale=np.array([15, 4])).rvs
+p = [lambda loc: st.multivariate_normal.rvs(mean=loc, cov=np.array([[3, 0], [0, 0.5]]))] * K
+u0 = st.uniform(loc=np.array([0, 0]), scale=np.array([11, 2])).rvs
 Ns = 1
-T_factor = 2
+T_factor = 3.75
 u = [lambda x, T=k: np.exp(post(x) / T_factor ** T) for k in range(K)]
 experiment_control = ParallelTempering(D, K, N, p, u, u0, Ns)
 experiment_contrast = ParallelTempering(D, K, N, p, u, u0, Ns)
@@ -57,7 +57,7 @@ plt.savefig('figures/ex3/csqi_trace2d.png')
 plt.show()
 
 # compute the efficient sample size
-max_iter = 5
+max_iter = 1
 ess_simple = experiment_control.get_effective_sample_size_2d()
 ess_walk = experiment_contrast.get_effective_sample_size_2d()
 for l in range(max_iter-1):

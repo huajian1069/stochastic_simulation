@@ -47,6 +47,9 @@ class ParallelTempering:
                                                        self.alpha_opt)
         elif mode == 'without PT':
             self.xs = random_walk_metropolis(self.D, self.N, self.p[0], self.u[0], self.u0)
+        else:
+            raise ValueError("Unsupported mode, please check your spelling and "
+                             "select one from {'simple PT', 'full PT', 'without PT'} ")
         return self.xs, acc
 
     def load(self, address):
@@ -54,7 +57,7 @@ class ParallelTempering:
             with open(address, 'rb') as f:
                 self.__dict__.update(pickle.Unpickler(f).load().__dict__)
         else:
-            print('data is not found on disk, please generate first')
+            raise OSError('data is not found on disk, please generate first')
 
     def save(self, address):
         with open(address, "wb") as f:
