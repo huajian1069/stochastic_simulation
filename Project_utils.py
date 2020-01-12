@@ -7,6 +7,7 @@ import scipy.integrate as integrate
 import dill as pickle
 import os.path
 import warnings
+from statsmodels.tsa.stattools import acf
 
 warnings.simplefilter("ignore")
 
@@ -70,7 +71,7 @@ class ParallelTempering:
         integral = integrate.quad(u, -5, 5)[0]
 
         ax.hist(self.xs, bins=100, density=True, label=self.mode)
-        ax.plot(x_t, y_t / integral, linewidth=1.5, label=r'$f(x)$')
+        ax.plot(x_t, y_t / integral, linewidth=1.5, label=r'$\mu_1(\theta)$')
         ax.set_title(density_des)
         plt.legend()
 
@@ -109,11 +110,11 @@ class ParallelTempering:
         ax.legend()
 
     def get_effective_sample_size(self):
-        return np.abs(self.N / (1 + 2 * (acf(self.xs, 1000).sum() - 1)))
+        return np.abs(self.N / (1+2*(np.abs(acf(self.xs, 1000)).sum()-1))
 
     def get_effective_sample_size_2d(self):
-        return np.abs(self.N / (1 + 2 * (acf(self.xs[:, 0], 1000).sum() - 1))), np.abs(
-            self.N / (1 + 2 * (acf(self.xs[:, 1], 1000).sum() - 1)))
+        return np.abs(self.N / (1+2*(np.abs(acf(self.xs[:,0], 1000)).sum()-1)), np.abs(
+            self.N / (1+2*(np.abs(acf(self.xs[:,1], 1000)).sum()-1))
 
 
 def metropolis_hastings(x, p, u):
@@ -241,21 +242,6 @@ def adaptive_parallel_tempering(D, K, N, p, u, u0, Ns, alpha_opt):
             logT[i] += 0.6 / (n + 1) * (alpha - alpha_opt)
             T[i + 1] = T[i] + np.exp(logT[i])
     return x[0], acceptance / ((N - 1) / Ns)
-
-
-def acf(x, k=41):
-    """
-    compute the sample auto-correlations function (ACF)
-    :param x: the generated Markov chain
-    :param k: lag size
-    """
-    N = len(x)
-    r = np.zeros((k,))
-    x = (x - x.mean()) / x.std()
-    for i in range(k):
-        r[i] = np.correlate(x[:N - i], x[i:]) / (N - i)
-    return r
-
 
 a = np.array([-2, -1])
 b = np.array([13, 3])
