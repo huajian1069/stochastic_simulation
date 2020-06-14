@@ -13,7 +13,7 @@ The plot figures are stored in figures directory.
 
 ### how to run it
 
-for exercise 2,3,4, directly run `python Project_ex2 and so on in terminal or run
+for exercise 2,3,4, directly run `python Project_ex3` and so on in terminal or run `run -i Project_ex3` in notebook.
 
 
 - animation of target distribution in exercise 3
@@ -37,7 +37,7 @@ p(x, y) has maximum of e at position of above circle. When (x,y) is far away fro
 
 That's it! p(x,y) is our target p.d.f. that represents the geometry we are interested to sample. You can define your custom distribution to say your desired words and use PM MCMC to generate random numbers that speak out for you.
 
-Here is my own example, HIT 100! This year(2020) is the 100th anniversary of my bachelor university.
+Here is my own example, HIT 100! This year(2020) is the 100th anniversary of my bachelor university: Harbin Institue of Technology.
 
 - target distribution
 
